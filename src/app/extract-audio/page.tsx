@@ -1,6 +1,10 @@
 "use client";
 
+import { FilePicker } from "@/components/FilePicker";
+import { DownloadIcon } from "@/components/icons";
 import { useMediaJob, type JobConfig } from "@/hooks/useMediaJob";
+import { formatBytes } from "@/lib/format";
+import { primaryButton, secondaryButton } from "@/lib/styles";
 
 // What makes this tool "Extract audio". Defined outside the component so it
 // is created once, not on every render.
@@ -15,19 +19,6 @@ const AUDIO_CONFIG: JobConfig = {
   outputExtension: "mp3",
   mimeType: "audio/mpeg",
 };
-
-const primaryButton =
-  "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-5 text-sm font-medium text-white transition-colors hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-300";
-
-const secondaryButton =
-  "inline-flex min-h-12 items-center justify-center rounded-xl border border-neutral-300 px-5 text-sm font-medium transition-colors hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-neutral-700 dark:hover:bg-neutral-800";
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  }
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
 
 export default function ExtractAudioPage() {
   const { state, selectFile, start, reset } = useMediaJob(AUDIO_CONFIG);
@@ -163,66 +154,5 @@ export default function ExtractAudioPage() {
         </section>
       </div>
     </main>
-  );
-}
-
-function FilePicker({ onSelect }: { onSelect: (file: File) => void }) {
-  return (
-    <label className="flex min-h-48 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-neutral-300 px-4 py-8 text-center transition-colors hover:border-neutral-500 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-blue-600 dark:border-neutral-700 dark:hover:border-neutral-500">
-      <UploadIcon className="h-8 w-8 text-neutral-500" />
-      <span className="font-medium">Choose a video</span>
-      <span className="text-sm text-neutral-500">
-        MP4, MOV, WebM and more
-      </span>
-      <input
-        type="file"
-        accept="video/*"
-        className="sr-only"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) onSelect(file);
-          // Reset so choosing the same file again still triggers onChange.
-          event.target.value = "";
-        }}
-      />
-    </label>
-  );
-}
-
-function UploadIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 16V4" />
-      <path d="m7 9 5-5 5 5" />
-      <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
-    </svg>
-  );
-}
-
-function DownloadIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 4v12" />
-      <path d="m7 11 5 5 5-5" />
-      <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
-    </svg>
   );
 }
