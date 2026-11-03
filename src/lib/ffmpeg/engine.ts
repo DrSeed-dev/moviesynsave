@@ -1,4 +1,5 @@
-// The FFmpeg engine. It knows how to load FFmpeg and run one job on one file.
+// The FFmpeg engine. It knows how to load FFmpeg, run one job on one file,
+// and stop a job that is taking too long.
 // It knows nothing about screens, buttons, or React.
 // Only import this file from client components (it needs the browser).
 
@@ -7,7 +8,8 @@ import { fetchFile } from "@ffmpeg/util";
 
 // FFmpeg lives in the browser's memory for as long as the page is open.
 // We keep ONE copy at module level so every tool shares it.
-let ffmpeg: FFmpeg | null = null;
+let ffmpeg: FFmpeg | null = null; // loaded and ready to use
+let pending: FFmpeg | null = null; // created, but still downloading
 let loadingPromise: Promise<FFmpeg> | null = null;
 
 /**
@@ -18,19 +20,42 @@ export function getEngine(): Promise<FFmpeg> {
   if (ffmpeg) return Promise.resolve(ffmpeg);
 
   if (!loadingPromise) {
-    loadingPromise = (async () => {
+    const promise: Promise<FFmpeg> = (async () => {
       const instance = new FFmpeg();
+      pending = instance;
       await instance.load();
+
+      // If cancelEngine() ran while we were loading, this copy is dead.
+      if (pending !== instance) throw new Error("Loading was cancelled.");
+
+      pending = null;
       ffmpeg = instance;
       return instance;
     })().catch((error) => {
-      // Let the next call try again instead of being stuck on a failed load.
-      loadingPromise = null;
+      // Let the next call try again, but only if a newer load has not
+      // already replaced this one.
+      if (loadingPromise === promise) loadingPromise = null;
       throw error;
     });
+
+    loadingPromise = promise;
   }
 
   return loadingPromise;
+}
+
+/**
+ * Stops whatever FFmpeg is doing right now.
+ * FFmpeg has no "pause" or "stop this one job" button. The only way to stop
+ * it is to shut the whole thing down. The next call to getEngine() loads a
+ * fresh copy (quick, because the files are already saved in the browser).
+ */
+export function cancelEngine() {
+  const target = ffmpeg ?? pending;
+  ffmpeg = null;
+  pending = null;
+  loadingPromise = null;
+  target?.terminate();
 }
 
 export type RunJobOptions = {
@@ -85,7 +110,8 @@ export async function runJob(options: RunJobOptions): Promise<RunJobResult> {
       try {
         await engine.deleteFile(name);
       } catch {
-        // The file may not exist if the job failed early. That is fine.
+        // The file may not exist if the job failed early, or FFmpeg may have
+        // been shut down by cancelEngine(). Either way that is fine.
       }
     }
   }

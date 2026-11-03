@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { getEngine, runJob } from "@/lib/ffmpeg/engine";
+import { cancelEngine, getEngine, runJob } from "@/lib/ffmpeg/engine";
 
 // ---------- 1. The shape of a job at every stage ----------
 
@@ -31,6 +31,7 @@ type Action =
   | { type: "progress"; progress: number }
   | { type: "done"; result: JobResult }
   | { type: "fail"; message: string }
+  | { type: "cancel" }
   | { type: "reset" };
 
 // ---------- 3. The rules: given the current state and an action, what is next? ----------
@@ -75,6 +76,14 @@ function reducer(state: JobState, action: Action): JobState {
         message: action.message,
       };
 
+    // Cancelling puts the user back where they were before pressing start,
+    // with their file still selected.
+    case "cancel":
+      if (state.status === "preparing" || state.status === "processing") {
+        return { status: "ready", file: state.file };
+      }
+      return state;
+
     case "reset":
       return { status: "idle" };
   }
@@ -98,6 +107,11 @@ function makeDownloadName(file: File, extension: string) {
 export function useMediaJob(config: JobConfig) {
   const [state, dispatch] = useReducer(reducer, { status: "idle" });
   const urlRef = useRef<string | null>(null);
+
+  // Every start() gets a number. If the user cancels, or starts again, the
+  // number changes, and any older job that is still winding down can see it
+  // is out of date and stays quiet instead of changing the screen.
+  const jobIdRef = useRef(0);
 
   // Browser URLs for finished files hold memory until we release them.
   const releaseUrl = useCallback(() => {
@@ -123,18 +137,31 @@ export function useMediaJob(config: JobConfig) {
     dispatch({ type: "reset" });
   }, [releaseUrl]);
 
+  const cancel = useCallback(() => {
+    if (state.status !== "preparing" && state.status !== "processing") return;
+
+    jobIdRef.current += 1; // makes the running job out of date
+    cancelEngine(); // actually stops FFmpeg
+    dispatch({ type: "cancel" });
+  }, [state.status]);
+
   const start = useCallback(async () => {
     if (state.status !== "ready" && state.status !== "error") return;
     const file = state.file;
     if (!file) return;
 
     releaseUrl();
+    jobIdRef.current += 1;
+    const jobId = jobIdRef.current;
+    const isCurrent = () => jobIdRef.current === jobId;
+
     dispatch({ type: "prepare" });
 
     try {
       // Download FFmpeg first (instant after the first visit), so the screen
       // can tell "preparing" apart from "processing".
       await getEngine();
+      if (!isCurrent()) return;
       dispatch({ type: "process" });
 
       const { blob } = await runJob({
@@ -142,8 +169,11 @@ export function useMediaJob(config: JobConfig) {
         buildArgs: config.buildArgs,
         outputName: `output.${config.outputExtension}`,
         mimeType: config.mimeType,
-        onProgress: (progress) => dispatch({ type: "progress", progress }),
+        onProgress: (progress) => {
+          if (isCurrent()) dispatch({ type: "progress", progress });
+        },
       });
+      if (!isCurrent()) return;
 
       const url = URL.createObjectURL(blob);
       urlRef.current = url;
@@ -158,6 +188,10 @@ export function useMediaJob(config: JobConfig) {
         },
       });
     } catch (error) {
+      // A cancelled job ends in an error from FFmpeg. That is expected,
+      // so we ignore it instead of showing "That did not work".
+      if (!isCurrent()) return;
+
       dispatch({
         type: "fail",
         message:
@@ -166,5 +200,5 @@ export function useMediaJob(config: JobConfig) {
     }
   }, [state, config, releaseUrl]);
 
-  return { state, selectFile, start, reset };
+  return { state, selectFile, start, cancel, reset };
 }

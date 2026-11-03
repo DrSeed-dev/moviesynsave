@@ -21,7 +21,7 @@ const AUDIO_CONFIG: JobConfig = {
 };
 
 export default function ExtractAudioPage() {
-  const { state, selectFile, start, reset } = useMediaJob(AUDIO_CONFIG);
+  const { state, selectFile, start, cancel, reset } = useMediaJob(AUDIO_CONFIG);
 
   return (
     <main className="min-h-dvh bg-neutral-50 px-4 py-10 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 sm:py-16">
@@ -75,6 +75,11 @@ export default function ExtractAudioPage() {
                 your device and loads instantly. On a slow connection it can
                 take a few minutes, so keep this tab open.
               </p>
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                <button type="button" onClick={cancel} className={secondaryButton}>
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
 
@@ -102,6 +107,11 @@ export default function ExtractAudioPage() {
               <p className="truncate text-sm text-neutral-500">
                 {state.file.name}
               </p>
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                <button type="button" onClick={cancel} className={secondaryButton}>
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
 
