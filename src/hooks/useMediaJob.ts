@@ -97,11 +97,12 @@ export type JobConfig = {
   buildArgs: (input: string, output: string) => string[];
   outputExtension: string; // "mp3", "mp4", ...
   mimeType: string; // "audio/mpeg", ...
+  nameSuffix?: string; // added to the download name, e.g. "-compressed"
 };
 
-function makeDownloadName(file: File, extension: string) {
+function makeDownloadName(file: File, extension: string, suffix = "") {
   const baseName = file.name.replace(/\.[^/.]+$/, "") || "output";
-  return `${baseName}.${extension}`;
+  return `${baseName}${suffix}.${extension}`;
 }
 
 export function useMediaJob(config: JobConfig) {
@@ -182,7 +183,11 @@ export function useMediaJob(config: JobConfig) {
         type: "done",
         result: {
           url,
-          downloadName: makeDownloadName(file, config.outputExtension),
+          downloadName: makeDownloadName(
+            file,
+            config.outputExtension,
+            config.nameSuffix
+          ),
           inputBytes: file.size,
           outputBytes: blob.size,
         },
