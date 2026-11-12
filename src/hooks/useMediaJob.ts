@@ -10,6 +10,7 @@ export type JobResult = {
   downloadName: string;
   inputBytes: number;
   outputBytes: number;
+  elapsedSeconds: number; // how long the processing took on this device
 };
 
 // Each stage carries only the data that exists at that stage.
@@ -18,17 +19,25 @@ export type JobState =
   | { status: "idle" }
   | { status: "ready"; file: File }
   | { status: "preparing"; file: File } // downloading FFmpeg (first visit only)
-  | { status: "processing"; file: File; progress: number } // progress is 0 to 1
+  | {
+      status: "processing";
+      file: File;
+      progress: number; // 0 to 1
+      startedAt: number; // when processing began (milliseconds)
+      etaSeconds: number | null; // measured estimate, null until we can tell
+    }
   | { status: "done"; file: File; result: JobResult }
   | { status: "error"; file: File | null; message: string };
 
 // ---------- 2. Everything that can happen to a job ----------
+// Times are passed in with the action (instead of read inside the reducer)
+// so the reducer stays a pure function.
 
 type Action =
   | { type: "select"; file: File }
   | { type: "prepare" }
-  | { type: "process" }
-  | { type: "progress"; progress: number }
+  | { type: "process"; at: number }
+  | { type: "progress"; progress: number; at: number }
   | { type: "done"; result: JobResult }
   | { type: "fail"; message: string }
   | { type: "cancel" }
@@ -53,15 +62,30 @@ function reducer(state: JobState, action: Action): JobState {
 
     case "process":
       if (state.status === "preparing") {
-        return { status: "processing", file: state.file, progress: 0 };
+        return {
+          status: "processing",
+          file: state.file,
+          progress: 0,
+          startedAt: action.at,
+          etaSeconds: null,
+        };
       }
       return state;
 
-    case "progress":
-      if (state.status === "processing") {
-        return { ...state, progress: action.progress };
-      }
-      return state;
+    case "progress": {
+      if (state.status !== "processing") return state;
+
+      // Time left = time spent so far, scaled by how much is still to do.
+      // We wait for a few percent and a few seconds so the first guesses
+      // do not swing wildly.
+      const elapsedMs = action.at - state.startedAt;
+      const etaSeconds =
+        action.progress >= 0.03 && elapsedMs >= 3000
+          ? (elapsedMs * (1 - action.progress)) / action.progress / 1000
+          : null;
+
+      return { ...state, progress: action.progress, etaSeconds };
+    }
 
     case "done":
       if (state.status === "processing") {
@@ -163,7 +187,9 @@ export function useMediaJob(config: JobConfig) {
       // can tell "preparing" apart from "processing".
       await getEngine();
       if (!isCurrent()) return;
-      dispatch({ type: "process" });
+
+      const startedAt = Date.now();
+      dispatch({ type: "process", at: startedAt });
 
       const { blob } = await runJob({
         file,
@@ -171,7 +197,9 @@ export function useMediaJob(config: JobConfig) {
         outputName: `output.${config.outputExtension}`,
         mimeType: config.mimeType,
         onProgress: (progress) => {
-          if (isCurrent()) dispatch({ type: "progress", progress });
+          if (isCurrent()) {
+            dispatch({ type: "progress", progress, at: Date.now() });
+          }
         },
       });
       if (!isCurrent()) return;
@@ -190,6 +218,7 @@ export function useMediaJob(config: JobConfig) {
           ),
           inputBytes: file.size,
           outputBytes: blob.size,
+          elapsedSeconds: (Date.now() - startedAt) / 1000,
         },
       });
     } catch (error) {

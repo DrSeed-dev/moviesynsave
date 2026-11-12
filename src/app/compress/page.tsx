@@ -4,7 +4,13 @@ import { useMemo, useState } from "react";
 import { FilePicker } from "@/components/FilePicker";
 import { DownloadIcon } from "@/components/icons";
 import { useMediaJob, type JobConfig } from "@/hooks/useMediaJob";
-import { formatBytes } from "@/lib/format";
+import { useVideoInfo } from "@/hooks/useVideoInfo";
+import {
+  formatBytes,
+  formatDuration,
+  formatElapsed,
+  formatTimeLeft,
+} from "@/lib/format";
 import { primaryButton, secondaryButton } from "@/lib/styles";
 
 // ---------- The three choices the user sees ----------
@@ -93,6 +99,10 @@ export default function CompressPage() {
 
   const { state, selectFile, start, cancel, reset } = useMediaJob(config);
 
+  // The length and size of the chosen video, read by the browser itself.
+  const chosenFile = "file" in state ? state.file : null;
+  const info = useVideoInfo(chosenFile);
+
   return (
     <main className="min-h-dvh bg-neutral-50 px-4 py-10 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 sm:py-16">
       <div className="mx-auto w-full max-w-xl">
@@ -118,6 +128,9 @@ export default function CompressPage() {
                 <p className="truncate font-medium">{state.file.name}</p>
                 <p className="text-sm text-neutral-500">
                   {formatBytes(state.file.size)}
+                  {info
+                    ? ` \u00b7 ${formatDuration(info.durationSeconds)} \u00b7 ${info.width}x${info.height}`
+                    : ""}
                 </p>
               </div>
 
@@ -159,10 +172,19 @@ export default function CompressPage() {
                 </div>
               </fieldset>
 
-              <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                Compressing happens on your device, so it can take a while,
-                especially on a phone. Keep this tab open until it finishes.
-              </p>
+              {info && info.durationSeconds > 60 ? (
+                <p className="rounded-xl border border-neutral-300 p-4 text-sm text-neutral-700 dark:border-neutral-700 dark:text-neutral-300">
+                  This video is {formatDuration(info.durationSeconds)} long.
+                  Compressing happens on your device, so a video this long can
+                  take several minutes on a laptop and much longer on a phone.
+                  Keep this tab open until it finishes.
+                </p>
+              ) : (
+                <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                  Compressing happens on your device, so it can take a while,
+                  especially on a phone. Keep this tab open until it finishes.
+                </p>
+              )}
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button type="button" onClick={start} className={primaryButton}>
@@ -218,6 +240,11 @@ export default function CompressPage() {
                   style={{ width: `${Math.round(state.progress * 100)}%` }}
                 />
               </div>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                {state.etaSeconds === null
+                  ? "Estimating time left..."
+                  : `Estimated time left: ${formatTimeLeft(state.etaSeconds)}`}
+              </p>
               <p className="truncate text-sm text-neutral-500">
                 {state.file.name}
               </p>
@@ -242,6 +269,10 @@ export default function CompressPage() {
                           100
                       )}% smaller)`
                     : ""}
+                </p>
+                <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                  Finished in {formatElapsed(state.result.elapsedSeconds)} on
+                  this device.
                 </p>
                 {state.result.outputBytes >= state.result.inputBytes && (
                   <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
