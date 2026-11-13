@@ -104,7 +104,7 @@ export default function CompressPage() {
   const info = useVideoInfo(chosenFile);
 
   return (
-    <main className="min-h-dvh bg-neutral-50 px-4 py-10 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 sm:py-16">
+    <main className="flex-1 bg-neutral-50 px-4 py-10 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 sm:py-16">
       <div className="mx-auto w-full max-w-xl">
         <header>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
